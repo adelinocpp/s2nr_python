@@ -40,7 +40,7 @@ def S2NR(y_data, fs, frame_length, frame_shift, NFFT, RTH, sigma):
     y_data = y_data/np.max(np.abs(y_data))
     
     [AmpliNorm,AmpliNormLog, Taxis] = GenerateSpectrum( y_data, fs, nTimeWindow, nTimeStep, NFFT)
-    NumFrames = AmpliNorm.shape[1]
+    # NumFrames = AmpliNorm.shape[1]
     sizeAmpli = AmpliNorm.shape
 		
     # Pre-processing : zero-padding 	
@@ -62,7 +62,7 @@ def S2NR(y_data, fs, frame_length, frame_shift, NFFT, RTH, sigma):
     return H2NR_signal, S2NR_signal, 10*np.log10(stats.trim_mean(H2NR_norm,0.0015)), 10*np.log10(stats.trim_mean(S2NR_norm,0.0015))
 # ------------------------------------------------------------------------------
 def NormMinMax(data):
-    return (data - np.min(data)) / (np.max(data) - np.min(data))
+    return np.divide((data - np.min(data)),(np.max(data) - np.min(data)))
 # ------------------------------------------------------------------------------
 def NormMeanStd(data):
     return (data - np.mean(data)) /np.std(data)

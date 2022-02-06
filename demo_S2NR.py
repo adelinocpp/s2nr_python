@@ -28,6 +28,6 @@ fig = plt.figure(figsize=(10,8))
 plt.plot(time,vecH2NR)
 plt.plot(time,mH2NR*np.ones(len(vecH2NR),))
 plt.plot(time,vecS2NR)
-plt.plot(time,mH2NR*np.ones(len(mS2NR),))
+plt.plot(time,mS2NR*np.ones(len(vecS2NR),))
 
 
