@@ -40,7 +40,7 @@ calibrate_S2NR = True
 vecNFFT = [512, 1024, 2048, 4096]
 vecRTH = [0.03, 0.1, 0.3, 0.6, 0.95]
 vecSIGMA = [0.007, 0.01, 0.07, 0.1, 0.4]
-
+nRounds = 23
 
 if (calibrate_S2NR):
     print("Calibrando S2NR")
@@ -59,51 +59,52 @@ if (calibrate_S2NR):
     lstdiffS2NRstd = []
     lstdiffH2NRstd = []
     
-    for idx, filename in enumerate(feature_list):
-        with open(filename, 'rb') as f:
-            suport_feature = pickle.load(f)
-        wavename = os.path.join(CALIBRATE_FOLDER, suport_feature['filename'])
-        audio, sr = librosa.load(wavename, sr=None, mono=True)
-        sNFFT = vecNFFT[np.random.randint(0,len(vecNFFT))]
-        sRTH = vecRTH[np.random.randint(0,len(vecRTH))]
-        sSIGMA = vecSIGMA[np.random.randint(0,len(vecSIGMA))]
-        rH2NR, rS2NR, mH2NR, mS2NR = S2NR(audio, sr, win_length, hop_length, NFFT=sNFFT, RTH=sRTH, sigma=sSIGMA)
-        
-        vad_audio = suport_feature['vad']
-        SNR_target = suport_feature['frame_snr_target']
-        snr_vad, _ = snr_vad_total(audio,vad_audio,sr)
-        
-        frame_SNR = suport_feature['frame_snr']
-        # nptRef = len(suport_feature['frame_snr'])
-        # nptS2NR = len(rH2NR)
-        numFrames = np.min([len(suport_feature['frame_snr']),len(rH2NR), len(vad_audio)])
-        
-        vad_audio = vad_audio[:numFrames]
-        diffS2NR = np.array(rS2NR[:numFrames] - frame_SNR[:numFrames])
-        diffH2NR = np.array(rH2NR[:numFrames] - frame_SNR[:numFrames])
-        
-        idx_vad = vad_audio.nonzero()[0]
-        idx_pbm = (idx_vad >= numFrames).nonzero()[0]
-        if (len(idx_pbm) > 0):
-            idx_vad = np.delete(idx_vad, idx_pbm)
+    for iRound in range(0,nRounds):
+        for idx, filename in enumerate(feature_list):
+            with open(filename, 'rb') as f:
+                suport_feature = pickle.load(f)
+            wavename = os.path.join(CALIBRATE_FOLDER, suport_feature['filename'])
+            audio, sr = librosa.load(wavename, sr=None, mono=True)
+            sNFFT = vecNFFT[np.random.randint(0,len(vecNFFT))]
+            sRTH = vecRTH[np.random.randint(0,len(vecRTH))]
+            sSIGMA = vecSIGMA[np.random.randint(0,len(vecSIGMA))]
+            rH2NR, rS2NR, mH2NR, mS2NR = S2NR(audio, sr, win_length, hop_length, NFFT=sNFFT, RTH=sRTH, sigma=sSIGMA)
             
-        rH2NR = rH2NR[idx_vad]
-        rS2NR = rS2NR[idx_vad]
-        diffH2NR = diffH2NR[idx_vad]
-        diffS2NR = diffS2NR[idx_vad]
-        lstSNRtarget.append(SNR_target)
-        lstSNRvad.append(snr_vad)
-        lstNFFT.append(sNFFT)
-        lstRTH.append(sRTH)
-        lstSIGMA.append(sSIGMA)
-        lstS2NRmean.append(stats.trim_mean(rS2NR,0.0015))
-        lstH2NRmean.append(stats.trim_mean(rH2NR,0.0015))
-        lstdiffS2NRmean.append(stats.trim_mean(diffS2NR,0.0015))
-        lstdiffH2NRmean.append(stats.trim_mean(diffH2NR,0.0015))
-        lstdiffS2NRstd.append(stats.mstats.trimmed_std(diffS2NR, limits=(0.0015, 0.0015)))
-        lstdiffH2NRstd.append(stats.mstats.trimmed_std(diffH2NR, limits=(0.0015, 0.0015)))
-        print('\tFinalizado arquivo {:4} de {:4}'.format(idx, len(feature_list)-1))
-    
+            vad_audio = suport_feature['vad']
+            SNR_target = suport_feature['frame_snr_target']
+            snr_vad, _ = snr_vad_total(audio,vad_audio,sr)
+            
+            frame_SNR = suport_feature['frame_snr']
+            # nptRef = len(suport_feature['frame_snr'])
+            # nptS2NR = len(rH2NR)
+            numFrames = np.min([len(suport_feature['frame_snr']),len(rH2NR), len(vad_audio)])
+            
+            vad_audio = vad_audio[:numFrames]
+            diffS2NR = np.array(rS2NR[:numFrames] - frame_SNR[:numFrames])
+            diffH2NR = np.array(rH2NR[:numFrames] - frame_SNR[:numFrames])
+            
+            idx_vad = vad_audio.nonzero()[0]
+            idx_pbm = (idx_vad >= numFrames).nonzero()[0]
+            if (len(idx_pbm) > 0):
+                idx_vad = np.delete(idx_vad, idx_pbm)
+                
+            rH2NR = rH2NR[idx_vad]
+            rS2NR = rS2NR[idx_vad]
+            diffH2NR = diffH2NR[idx_vad]
+            diffS2NR = diffS2NR[idx_vad]
+            lstSNRtarget.append(SNR_target)
+            lstSNRvad.append(snr_vad)
+            lstNFFT.append(sNFFT)
+            lstRTH.append(sRTH)
+            lstSIGMA.append(sSIGMA)
+            lstS2NRmean.append(stats.trim_mean(rS2NR,0.0015))
+            lstH2NRmean.append(stats.trim_mean(rH2NR,0.0015))
+            lstdiffS2NRmean.append(stats.trim_mean(diffS2NR,0.0015))
+            lstdiffH2NRmean.append(stats.trim_mean(diffH2NR,0.0015))
+            lstdiffS2NRstd.append(stats.mstats.trimmed_std(diffS2NR, limits=(0.0015, 0.0015)))
+            lstdiffH2NRstd.append(stats.mstats.trimmed_std(diffH2NR, limits=(0.0015, 0.0015)))
+            print('\tFinalizado arquivo {:4d} de {:4d}, rodada {:2d} de {:2d}'.format(idx, len(feature_list)-1, iRound,nRounds-1))
+        
     dict_data = {'SNR_target': lstSNRtarget,
                  'SNR_vad': lstSNRvad,
                  'NFFT': lstNFFT,
