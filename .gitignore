@@ -1,6 +1,8 @@
 /__pycache__
+/Calculos_S2NR
 /RUIDOS
 /Vozes_Sintetizadas_Sem_ruido
+/Vozes_Calibracao
 /utils/__pycache__
 .spyproject
 *.wav

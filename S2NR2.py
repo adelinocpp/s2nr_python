@@ -41,7 +41,7 @@ def planSpectrum(y_data, fs):
     y_out = np.zeros((y_data.shape))
     for i in range(0,nc):
         y = 20*np.log10(y_data[:,i])
-        pM, pF, bM, bF, pI, bI = spec_peaks_slice(y,f,insBorder=False)
+        pM, pF, bM, bF, pI, bI = spec_peaks_slice(y,f)
         # pM = np.power(10,pM/20)
         # bM = np.power(10,bM/20)
         # maxVal = np.max(pM)
@@ -54,7 +54,9 @@ def planSpectrum(y_data, fs):
         # Interactive correction
         maxC = pchip_interpolate(pF, pM,f)
         upMaxIdx = ((y- maxC) > epsTol).nonzero()[0]
-        while (len(upMaxIdx) > 0):
+        k = 0
+        while ((len(upMaxIdx) > 0) and (k < int(0.1*len(y)))):
+            k = k + 1
             for idx in range(0,len(pI)-1):
                 idxR = np.array([x and y for x,y in zip(upMaxIdx > pI[idx],upMaxIdx < pI[idx+1])]).nonzero()[0]
                 if (len(idxR) < 1):
@@ -65,7 +67,8 @@ def planSpectrum(y_data, fs):
                 break   
             pI = np.array(tpI,dtype=np.int32)
             pF = f[pI]
-            pM = y[pI]
+            # pM = y[pI]
+            pM = np.concatenate( (pM[:1], y[pI[1:-1]], pM[-1:] ) )
             maxC = pchip_interpolate(pF, pM,f)    
             upMaxIdx = ((y- maxC) > epsTol).nonzero()[0]
             if (len(upMaxIdx) == 1) and ( (upMaxIdx[0] == 0) or (upMaxIdx[0] == (len(y) - 1))):
@@ -73,7 +76,9 @@ def planSpectrum(y_data, fs):
             
         minC = pchip_interpolate(bF, bM,f)
         dwMinIdx = ((minC -y) > epsTol).nonzero()[0]
-        while (len(dwMinIdx) > 0):
+        k = 0
+        while ((len(dwMinIdx) > 0)  and (k < int(0.1*len(y)))):
+            k = k + 1
             for idx in range(0,len(bI)-1):
                 idxR = np.array([x and y for x,y in zip(dwMinIdx > bI[idx],dwMinIdx < bI[idx+1])]).nonzero()[0]
                 if (len(idxR) < 1):
@@ -84,7 +89,8 @@ def planSpectrum(y_data, fs):
                 break   
             bI = np.array(tbI,dtype=np.int32)
             bF = f[bI]
-            bM = y[bI]
+            # bM = y[bI]
+            bM = np.concatenate( (bM[:1], y[bI[1:-1]], bM[-1:] ) )
             minC = pchip_interpolate(bF, bM,f) 
             dwMinIdx = ((minC -y) > epsTol).nonzero()[0]
             if (len(dwMinIdx) == 1) and ( (dwMinIdx[0] == 0) or (dwMinIdx[0] == (len(y) - 1))):
@@ -92,31 +98,32 @@ def planSpectrum(y_data, fs):
         
         if (np.count_nonzero(maxC-minC) < len(maxC)):
             maxC += minVal
-        y_out[:,i] = np.divide((y - minC),(maxC-minC)) + minVal
+        y_out[:,i] = np.divide((y - minC),(maxC-minC))
         
-        y_max[:,i] = np.power(10,maxC/20)
-        y_min[:,i] = np.power(10,minC/20)
+        y_max[:,i] = maxC
+        y_min[:,i] = minC
     return y_out, y_min, y_max
 # ------------------------------------------------------------------------------
-def S2NR(y_data, fs, frame_length, frame_shift, NFFT, RTH, sigma,mmNorm=False):
+def S2NR2(y_data, fs, frame_length, frame_shift, NFFT, RTH, sigma,mmNorm=False):
     nTimeWindow = int(np.ceil(fs*frame_length))
     nTimeStep = int(np.ceil(fs*frame_shift))
     nSamples = len(y_data)
 
     param = S2NRparam(fs,nSamples, NFFT=NFFT,RTH=RTH, sigma=sigma,Norm=mmNorm)
 
-    y_data = y_data/np.max(np.abs(y_data))
+    y_data = y_data/np.max(np.abs(y_data)) + np.random.normal(0, 0.33/(2**16), len(y_data))
     
-    [AmpliNorm,AmpliNormLog, Taxis, pMinMax] = GenerateSpectrum( y_data, fs, nTimeWindow, nTimeStep, NFFT,mmNorm)
+    [AmpliNormLog, Taxis, pMinMax] = GenerateSpectrum( y_data, fs, nTimeWindow, nTimeStep, NFFT,mmNorm)
     # NumFrames = AmpliNorm.shape[1]
-    sizeAmpli = AmpliNorm.shape
+    sizeAmpli = AmpliNormLog.shape
 		
     # Pre-processing : zero-padding 	
     zeroMatrix = np.zeros((param.OFFSET,sizeAmpli[1]))
-    SpectrumInput = np.concatenate((zeroMatrix, AmpliNorm), axis=0)
+    # SpectrumInput = np.concatenate((zeroMatrix, AmpliNorm), axis=0)
     SpectrumInputLog = np.concatenate((zeroMatrix, AmpliNormLog), axis=0)
 
-    H2NR_signal, S2NR_signal = s2nr_measurement(SpectrumInput, SpectrumInputLog, param, pMinMax)
+    # H2NR_signal, S2NR_signal = s2nr_measurement(SpectrumInput, SpectrumInputLog, param, pMinMax)
+    H2NR_signal, S2NR_signal = s2nr_measurement(SpectrumInputLog, param, pMinMax)
 
     
     H2NR_norm  = 10 ** (H2NR_signal/10)
@@ -153,13 +160,15 @@ def GenerateSpectrum(audio, fs, n_win_length, n_hop_length, n_FFT, spkNorm):
     mtxMin = np.zeros((linear_spect.shape))
     mtxMax = np.ones((linear_spect.shape))
     if (spkNorm):
-        mag, mtxMin, mtxMax = planSpectrum(mag,fs)    
-        
-    AmpliNorm = NormMinMax(mag)
-    AmpliLog = 20*np.log10(mag+1e-9);
-    AmpliNormLog = NormMinMax(AmpliLog)
-    Taxis = np.linspace(0,(Ns-1)/fs,AmpliLog.shape[1])    
-    return AmpliNorm, AmpliNormLog, Taxis, np.array([mtxMin,mtxMax])
+        AmpliNormLog, mtxMin, mtxMax = planSpectrum(mag,fs)    
+        AmpliNormLog += 1e-9
+    else:
+        AmpliLog = 20*np.log10(mag+1e-9);
+        AmpliNormLog = NormMinMax(AmpliLog)
+   
+    Taxis = np.linspace(0,(Ns-1)/fs,AmpliNormLog.shape[1])    
+    # return AmpliNorm, AmpliNormLog, Taxis, np.array([mtxMin,mtxMax])
+    return AmpliNormLog, Taxis, np.array([mtxMin,mtxMax])
 # ------------------------------------------------------------------------------
 def ridgesegment(im, param):
     im = NormMeanStd(im)  # normalise to have zero mean, unit std dev
@@ -324,7 +333,7 @@ def ridgefilter(im, orient, freq, param):
     rows, cols = im.shape;
     newim = np. zeros((rows,cols))
     
-    (validr,validc) = (freq > 0.0).nonzero()  # find where there is valid frequency data.
+    (validr,validc) = (freq >= 0.01).nonzero()  # find where there is valid frequency data.
     # ind = sub2ind([rows,cols], validr, validc);
 
     # Round the array of frequencies to the nearest 0.01 to reduce the
@@ -335,6 +344,10 @@ def ridgefilter(im, orient, freq, param):
     # freq 
     unfreq = np.unique(freq[(validr,validc)])
     
+    if (len(unfreq) < 1):
+        print("Erro: problema ao isolar frequencias da imagem.")
+        return im
+        
     # Generate a table, given the frequency value multiplied by 100 to obtain
     # an integer index, returns the index within the unfreq array that it
     # corresponds to
@@ -345,8 +358,8 @@ def ridgefilter(im, orient, freq, param):
     # Generate filters corresponding to these distinct frequencies and
     # orientations in 'angleInc' increments.
     # filter = np.zeros((len(unfreq),int(180/angleInc),None,None))
-    filter = {}
-    sze = np.zeros((len(unfreq),1))
+    filter_dict = {}
+    sze = np.zeros((len(unfreq),))
     
     for k in range(0,len(unfreq)):
         sigmax = 1/unfreq[k]*param.kx
@@ -361,10 +374,14 @@ def ridgefilter(im, orient, freq, param):
         # degrees, and imrotate requires angles +ve anticlockwise, hence
         # the minus sign.
         for o in range(0,int(180/angleInc)):
-            filter[k,o] = ndimage.rotate(reffilter,-(o*angleInc+90),reshape=False)
+            filter_dict[k,o] = ndimage.rotate(reffilter,-(o*angleInc+90),reshape=False)
     
     # Find indices of matrix points greater than maxsze from the image
     # boundary
+    if (len(sze) < 1):
+        print("Erro: problema ao isolar frequencias da imagem.")
+        return im
+    
     maxsze = sze[0]
     
     boolTemp = np.array((validr>maxsze) & (validr<(rows-maxsze)) & (validc>maxsze) & (validc<(cols-maxsze)),dtype=int)
@@ -386,11 +403,12 @@ def ridgefilter(im, orient, freq, param):
         filterindex = int(freqindex[int(np.round(freq[rs,cs]*100))])
         
         ss = int(sze[filterindex])
-        newim[rs,cs] = np.sum(im[rs-ss:rs+ss, cs-ss:cs+ss]*filter[filterindex,int(orientindex[rs,cs])])
+        newim[rs,cs] = np.sum(im[rs-ss:rs+ss, cs-ss:cs+ss]*filter_dict[filterindex,int(orientindex[rs,cs])])
 
     return newim
 # ------------------------------------------------------------------------------
-def s2nr_measurement(im, imlog,param, pMinMax):
+def s2nr_measurement(imlog,param, pMinMax):
+    im = imlog
     normim, mask = ridgesegment(imlog, param)
     # Determine ridge orientations 
     orientim, reliability = ridgeorient(normim, param)
@@ -411,12 +429,6 @@ def s2nr_measurement(im, imlog,param, pMinMax):
     # the orientation reliability is greater than rthresh
     mtxMin = np.zeros((im.shape))
     mtxMax = np.zeros((im.shape))
-    if (param.MimMaxNorm):
-        mtxMin = pMinMax[0]
-        mtxMin = np.vstack([np.zeros((im.shape[0]-mtxMin.shape[0],im.shape[1])),mtxMin])
-        mtxMax = pMinMax[1]
-        mtxMax = np.vstack([np.zeros((im.shape[0]-mtxMax.shape[0],im.shape[1])),mtxMax])
-        im = np.multiply(im,(mtxMax - mtxMin)) + mtxMin
         
     MascaraR = np.array(reliability>param.rthresh,dtype=int)
     Mascara = binim*mask*MascaraR
@@ -426,18 +438,28 @@ def s2nr_measurement(im, imlog,param, pMinMax):
     ImMNot = (1-MascaraNew)*im
     ImMNot = signal.medfilt2d(ImMNot)
 
+    if (param.MimMaxNorm):
+        mtxMin = pMinMax[0]
+        mtxMin = np.vstack([np.zeros((im.shape[0]-mtxMin.shape[0],im.shape[1])),mtxMin])
+        mtxMax = pMinMax[1]
+        mtxMax = np.vstack([np.zeros((im.shape[0]-mtxMax.shape[0],im.shape[1])),mtxMax])
+        ImM = np.multiply(ImM,(mtxMax - mtxMin)) + mtxMin
+        im = np.multiply(im,(mtxMax - mtxMin)) + mtxMin
+        ImMNot = np.multiply(ImMNot,(mtxMax - mtxMin)) + mtxMin
+
     SImH =   np.sum( ImM**2,axis=0)
     SImM =   np.sum( im**2,axis=0)
     SImMNot = np.sum( ImMNot**2,axis=0)
-
-
 
     Temp = (SImM+param.eps)/(SImMNot+param.eps)
     Temp2 = (SImH+param.eps)/(SImMNot+param.eps)
     Temp_filt = signal.medfilt(Temp, kernel_size=15)
     Temp2_filt = signal.medfilt(Temp2, kernel_size=15)
-    HNR = 10 * np.log10(Temp2_filt)
-    SNR = 10 * np.log10(Temp_filt)
+    HNR = Temp2_filt
+    SNR = Temp_filt
+    
+    # HNR = 10 * np.log10(Temp2_filt)
+    # SNR = 10 * np.log10(Temp_filt)
     # HNR = 0
     # SNR = 0
     return HNR, SNR

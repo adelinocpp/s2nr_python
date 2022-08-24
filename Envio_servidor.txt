@@ -1,0 +1,5 @@
+rsync -ravz --rsh="ssh -p22622" ./*  adelino@150.164.32.50:/home/adelino/S2NR/
+
+rsync -ravz --rsh="ssh -p22622" adelino@150.164.32.50:/home/adelino/S2NR/Calculos_S2NR/* Calculos_S2NR/
+
+python3 P00_Compute_SNR_reference_Files_v0.py; python3 P01_Make_Audio_For_Calibration_v0.py; python3 P02_Pre_explore_calibrate_S2NR_v1.py;
