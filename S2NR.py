@@ -108,7 +108,7 @@ def S2NR(y_data, fs, frame_length, frame_shift, NFFT, RTH, sigma,mmNorm=False):
     y_data = y_data/np.max(np.abs(y_data))
     
     [AmpliNorm,AmpliNormLog, Taxis, pMinMax] = GenerateSpectrum( y_data, fs, nTimeWindow, nTimeStep, NFFT,mmNorm)
-    # NumFrames = AmpliNorm.shape[1]
+
     sizeAmpli = AmpliNorm.shape
 		
     # Pre-processing : zero-padding 	
